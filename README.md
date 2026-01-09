@@ -2,19 +2,20 @@
 
 It is to calculate factory counts in factory games.
 
+It stores all data in browser local storage so be sure to export the data after you have finished editing.
+
 ## Features
 
 ### Game Templates
-- **Satisfactory**: Pre-loaded with all items and recipes from Satisfactory
-- **Custom**: Build your own custom factory chains
+- **Satisfactory**: Pre-loaded with all items and recipes from Satisfactory 1.1 (not up to date yet)
+- **Default**: Build your own custom factory chains
 - **Create Your Own Games**: Add unlimited custom game templates for any factory game
 
 ### Game Management
-- Create custom game templates for any factory game (Factorio, Dyson Sphere Program, etc.)
+- Create custom game templates for any game or irl, you know your factories best
 - Each game stores its own complete set of items and recipes
 - Switch between games instantly
 - Update game templates as you refine your recipes
-- Built-in games (Satisfactory) plus unlimited custom games
 
 ### Resource Tree Filter
 Select a target item and specify how many factories you want, and the calculator will:
@@ -31,7 +32,7 @@ Toggle between two calculation modes:
 - All items are saved directly to game templates
 - No separate save/load system needed
 - Switch between games and your items are automatically there
-- Import/Export for sharing configurations
+- Import/Export for sharing configurations or backing up your data
 
 ## Usage
 
@@ -53,7 +54,7 @@ Toggle between two calculation modes:
 3. Use the Resource Tree Filter to focus on specific items
 
 ### Custom Factory Chains
-1. Select "Custom" game mode
+1. Select "Default" game mode
 2. Add items manually with their production requirements
 3. Build your factory network
 
@@ -86,4 +87,4 @@ Toggle on "Exact Mode" to use precise float calculations. This gives you exact f
 2. Select "Computer" as target item
 3. Set factory count to 10
 4. Click "Show Tree"
-5. The calculator shows exactly what resources you need to produce 10 Computer factories
+5. The calculator shows exactly what resources you need to have 10 Computer factories running
