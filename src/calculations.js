@@ -10,9 +10,10 @@
  * Calculate factory requirements for all items using spider web approach
  * Processes items only after ALL their consumers have been calculated
  * @param {Array} items - Array of all item definitions with their recipes
+ * @param {Boolean} exactMode - If true, use exact floats; if false, ceil values
  * @returns {Object} - Map of item names to factory counts, edge contributions, and final products
  */
-export function calculateFactoryRequirements(items) {
+export function calculateFactoryRequirements(items, exactMode = false) {
   // Build dependency graph
   const itemMap = new Map();
   items.forEach(item => itemMap.set(item.name, item));
@@ -52,6 +53,7 @@ export function calculateFactoryRequirements(items) {
   });
   
   console.log('\n=== Spider Web Calculation ===');
+  console.log('Mode:', exactMode ? 'EXACT (floats)' : 'CEILING (rounded up)');
   console.log('Final products:', finalProducts);
   
   while (ready.length > 0) {
@@ -75,9 +77,10 @@ export function calculateFactoryRequirements(items) {
       const consumptionRatePerFactory = req.count / item.time;
       const factoriesPerFactory = consumptionRatePerFactory / inputRate;
       
-      // Calculate total as float, THEN ceil
+      // Calculate total as float
       const totalFactoriesFloat = factoriesPerFactory * totalFactories;
-      const totalFactoriesNeeded = Math.ceil(totalFactoriesFloat);
+      // Apply ceiling only if not in exact mode
+      const totalFactoriesNeeded = exactMode ? totalFactoriesFloat : Math.ceil(totalFactoriesFloat);
       
       // Store edge contribution
       const edgeKey = `${req.item}->${itemName}`;
@@ -85,7 +88,7 @@ export function calculateFactoryRequirements(items) {
       
       console.log(`  ${req.item}: ${req.count}/${item.time}s = ${consumptionRatePerFactory.toFixed(3)}/s per factory`);
       console.log(`    Produces: ${inputItem.output}/${inputItem.time}s = ${inputRate.toFixed(3)}/s`);
-      console.log(`    Need: ${factoriesPerFactory.toFixed(3)} × ${totalFactories} = ${totalFactoriesFloat.toFixed(3)} → ceil to ${totalFactoriesNeeded}`);
+      console.log(`    Need: ${factoriesPerFactory.toFixed(3)} × ${totalFactories} = ${totalFactoriesFloat.toFixed(3)} ${exactMode ? '(exact)' : `→ ceil to ${totalFactoriesNeeded}`}`);
       
       // Add to input's total factory count
       if (!factoryCount[req.item]) {

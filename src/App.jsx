@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Upload, Menu, Save, FolderOpen, X, AlertCircle, Moon, Sun } from 'lucide-react';
+import { Trash2, Plus, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Upload, Menu, X, AlertCircle, Moon, Sun, Filter, Edit2, Gamepad2, Save } from 'lucide-react';
 import { calculateFactoryRequirements, calculateEdgeFactories, calculatePerFactoryRate } from './calculations';
+import { GAMES, getGameItems, getGameName, getAvailableGames } from './gameData';
 
 export default function FactoryCalculator() {
   const [items, setItems] = useState([]);
@@ -12,6 +13,8 @@ export default function FactoryCalculator() {
   });
   const [results, setResults] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedNodePosition, setSelectedNodePosition] = useState(null);
+  const [originalPan, setOriginalPan] = useState(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const svgRef = useRef(null);
@@ -23,17 +26,34 @@ export default function FactoryCalculator() {
   const [completedItems, setCompletedItems] = useState(new Set());
   const [contextMenu, setContextMenu] = useState(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [saves, setSaves] = useState([]);
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showLoadDialog, setShowLoadDialog] = useState(false);
-  const [newSaveName, setNewSaveName] = useState('');
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
-  const [currentSaveId, setCurrentSaveId] = useState(null);
+  const [exactMode, setExactMode] = useState(() => {
+    const saved = localStorage.getItem('factory-exact-mode');
+    return saved ? JSON.parse(saved) : false;
+  });
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('factory-dark-mode');
     return saved ? JSON.parse(saved) : false;
   });
+  const [currentGame, setCurrentGame] = useState(() => {
+    const saved = localStorage.getItem('factory-current-game');
+    return saved || GAMES.CUSTOM;
+  });
+  const [targetItem, setTargetItem] = useState(null);
+  const [targetFactoryCount, setTargetFactoryCount] = useState(1);
+  const [showResourceTree, setShowResourceTree] = useState(false);
+  const [customGames, setCustomGames] = useState(() => {
+    const saved = localStorage.getItem('factory-custom-games');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showGameManager, setShowGameManager] = useState(false);
+  const [newGameName, setNewGameName] = useState('');
+  const [itemSearchQuery, setItemSearchQuery] = useState('');
+  const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [editingGameId, setEditingGameId] = useState(null);
+  const [editingGameName, setEditingGameName] = useState('');
 
   const showNotification = (message, type = 'error') => {
     const id = Date.now();
@@ -53,63 +73,50 @@ export default function FactoryCalculator() {
     localStorage.setItem('factory-dark-mode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
-  // Load saves list and current work on mount
+  // Save current game
   useEffect(() => {
-    const loadData = () => {
-      try {
-        const savedList = localStorage.getItem('factory-saves-list');
-        if (savedList) {
-          setSaves(JSON.parse(savedList));
-        }
-        
-        // Load current working state
-        const saved = localStorage.getItem('factory-items-current');
-        if (saved) {
-          setItems(JSON.parse(saved));
-        }
-        
-        const savedCompleted = localStorage.getItem('factory-completed-current');
-        if (savedCompleted) {
-          setCompletedItems(new Set(JSON.parse(savedCompleted)));
-        }
-      } catch (error) {
-        console.log('Error loading data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadData();
+    localStorage.setItem('factory-current-game', currentGame);
+  }, [currentGame]);
+
+  // Save custom games
+  useEffect(() => {
+    localStorage.setItem('factory-custom-games', JSON.stringify(customGames));
+  }, [customGames]);
+
+  // Save exact mode preference
+  useEffect(() => {
+    localStorage.setItem('factory-exact-mode', JSON.stringify(exactMode));
+  }, [exactMode]);
+
+  // Load on mount
+  useEffect(() => {
+    setIsLoading(false);
   }, []);
 
-  // Auto-save current work
-  useEffect(() => {
-    if (!isLoading && items.length >= 0) {
-      try {
-        localStorage.setItem('factory-items-current', JSON.stringify(items));
-      } catch (error) {
-        console.error('Failed to save items:', error);
-      }
-    }
-  }, [items, isLoading]);
 
-  // Auto-save completed items
-  useEffect(() => {
-    if (!isLoading) {
-      try {
-        localStorage.setItem('factory-completed-current', JSON.stringify(Array.from(completedItems)));
-      } catch (error) {
-        console.error('Failed to save completed items:', error);
-      }
-    }
-  }, [completedItems, isLoading]);
 
   useEffect(() => {
-    if (items.length > 0) {
+    if (items.length > 0 && !showResourceTree) {
       calculate();
-    } else {
+    } else if (items.length === 0) {
       setResults(null);
     }
-  }, [items]);
+  }, [items, exactMode, showResourceTree]);
+
+  // Add wheel event listener with passive: false to allow preventDefault
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const wheelHandler = (e) => {
+      handleWheel(e);
+    };
+
+    svg.addEventListener('wheel', wheelHandler, { passive: false });
+    return () => {
+      svg.removeEventListener('wheel', wheelHandler);
+    };
+  }, [zoom, pan]);
 
   const addRequirement = () => {
     setCurrentItem({
@@ -189,7 +196,7 @@ export default function FactoryCalculator() {
     } else {
       // No references, safe to delete
       setItems(items.filter((_, i) => i !== index));
-      setSelectedItem(null);
+      handleSelectItem(null);
     }
   };
   
@@ -230,7 +237,7 @@ export default function FactoryCalculator() {
   };
 
   const calculate = () => {
-    const result = calculateFactoryRequirements(items);
+    const result = calculateFactoryRequirements(items, exactMode);
     setResults(result);
   };
 
@@ -239,6 +246,56 @@ export default function FactoryCalculator() {
   const handleReset = () => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
+  };
+
+  const handleSelectItem = (itemName, posInfo) => {
+    if (itemName && posInfo) {
+      // Selecting an item - store current pan position
+      setOriginalPan({ ...pan });
+      setSelectedNodePosition(posInfo);
+      setSelectedItem(itemName);
+    } else {
+      // Deselecting - will animate back to original pan
+      setSelectedNodePosition(null);
+      setSelectedItem(itemName);
+    }
+  };
+
+  const handleAnimatePan = (nodeX, nodeY, progress, isDeselecting) => {
+    if (isDeselecting && originalPan) {
+      // Animate back to original pan position
+      const currentPan = pan;
+      setPan({
+        x: currentPan.x + (originalPan.x - currentPan.x) * progress,
+        y: currentPan.y + (originalPan.y - currentPan.y) * progress
+      });
+      
+      // Clear original pan when animation is complete
+      if (progress >= 1) {
+        setOriginalPan(null);
+      }
+    } else if (selectedNodePosition && svgRef.current) {
+      // Calculate where the pan should be to keep the node at its original screen position
+      const targetPanX = selectedNodePosition.screenX - nodeX * zoom;
+      const targetPanY = selectedNodePosition.screenY - nodeY * zoom;
+      
+      setPan({
+        x: targetPanX,
+        y: targetPanY
+      });
+    }
+  };
+
+  const centerOnNode = (nodeX, nodeY) => {
+    if (!svgRef.current) return { x: nodeX, y: nodeY };
+    const rect = svgRef.current.getBoundingClientRect();
+    // Return the screen position where the node currently appears
+    return {
+      screenX: pan.x + nodeX * zoom,
+      screenY: pan.y + nodeY * zoom,
+      initialX: nodeX,
+      initialY: nodeY
+    };
   };
 
   const handleMouseDown = (e) => {
@@ -382,97 +439,230 @@ export default function FactoryCalculator() {
     });
   };
 
-  const saveCurrentWork = (overwrite = false) => {
-    if (!overwrite && !newSaveName.trim()) {
-      showNotification('Please enter a save name', 'error');
-      return;
-    }
-    
-    let saveId, saveName, updatedSaves;
-    
-    if (overwrite && currentSaveId) {
-      // Overwrite existing save
-      saveId = currentSaveId;
-      saveName = saves.find(s => s.id === currentSaveId)?.name || 'save';
-      updatedSaves = saves.map(s => 
-        s.id === currentSaveId 
-          ? { ...s, date: new Date().toISOString() }
-          : s
-      );
-    } else {
-      // Create new save
-      saveId = `save-${Date.now()}`;
-      saveName = newSaveName.trim();
-      const newSave = { 
-        id: saveId, 
-        name: saveName,
-        date: new Date().toISOString()
-      };
-      updatedSaves = [...saves, newSave];
-      setCurrentSaveId(saveId);
-    }
-    
-    // Save current work
-    localStorage.setItem(`factory-items-${saveId}`, JSON.stringify(items));
-    localStorage.setItem(`factory-completed-${saveId}`, JSON.stringify(Array.from(completedItems)));
-    
-    setSaves(updatedSaves);
-    localStorage.setItem('factory-saves-list', JSON.stringify(updatedSaves));
-    setNewSaveName('');
-    setShowSaveDialog(false);
-    showNotification(`Saved as "${saveName}"`, 'success');
-  };
 
-  const loadSave = (saveId) => {
-    try {
-      const saved = localStorage.getItem(`factory-items-${saveId}`);
-      if (saved) {
-        setItems(JSON.parse(saved));
-      } else {
-        setItems([]);
-      }
-      
-      const savedCompleted = localStorage.getItem(`factory-completed-${saveId}`);
-      if (savedCompleted) {
-        setCompletedItems(new Set(JSON.parse(savedCompleted)));
-      } else {
-        setCompletedItems(new Set());
-      }
-      
-      setCurrentSaveId(saveId);
-      setShowLoadDialog(false);
-      const saveName = saves.find(s => s.id === saveId)?.name || 'save';
-      showNotification(`Loaded "${saveName}"`, 'success');
-    } catch (error) {
-      console.error('Error loading save:', error);
-      showNotification('Error loading save', 'error');
-    }
-  };
-
-  const deleteSave = (saveId) => {
-    const updatedSaves = saves.filter(s => s.id !== saveId);
-    setSaves(updatedSaves);
-    localStorage.setItem('factory-saves-list', JSON.stringify(updatedSaves));
-    localStorage.removeItem(`factory-items-${saveId}`);
-    localStorage.removeItem(`factory-completed-${saveId}`);
-  };
 
   const createNew = () => {
     setItems([]);
     setCompletedItems(new Set());
-    setSelectedItem(null);
+    handleSelectItem(null);
     setEditingItem(null);
     setEditForm(null);
     setZoom(1);
     setPan({ x: 0, y: 0 });
-    setCurrentSaveId(null);
+    setTargetItem(null);
+    setTargetFactoryCount(1);
+    setShowResourceTree(false);
+    setResults(null);
+  };
+
+  const loadGameTemplate = (gameId) => {
+    const gameItems = getGameItems(gameId);
+    const customGame = customGames.find(g => g.id === gameId);
+    
+    if (customGame) {
+      setItems(customGame.items || []);
+      setCurrentGame(gameId);
+      showNotification(`Loaded ${customGame.name}`, 'success');
+    } else if (gameItems.length > 0) {
+      setItems(gameItems);
+      setCurrentGame(gameId);
+      showNotification(`Loaded ${getGameName(gameId)} template`, 'success');
+    } else {
+      setItems([]);
+      setCurrentGame(gameId);
+      showNotification(`Switched to ${gameId}`, 'success');
+    }
+    
+    setCompletedItems(new Set());
+    setTargetItem(null);
+    setTargetFactoryCount(1);
+    setShowResourceTree(false);
+    // Don't clear results here - let the useEffect recalculate automatically when items change
+  };
+
+  const createCustomGame = () => {
+    if (!newGameName.trim()) {
+      showNotification('Please enter a game name', 'error');
+      return;
+    }
+
+    const gameId = `custom-${Date.now()}`;
+    const newGame = {
+      id: gameId,
+      name: newGameName.trim(),
+      items: [...items], // Copy current items
+      createdAt: new Date().toISOString()
+    };
+
+    setCustomGames([...customGames, newGame]);
+    setCurrentGame(gameId);
+    setNewGameName('');
+    showNotification(`Created game "${newGame.name}"`, 'success');
+  };
+
+  const saveCurrentGameItems = () => {
+    const customGame = customGames.find(g => g.id === currentGame);
+    
+    if (!customGame) {
+      showNotification('Can only save items to custom games', 'error');
+      return;
+    }
+
+    const updatedGames = customGames.map(g => 
+      g.id === currentGame 
+        ? { ...g, items: [...items], updatedAt: new Date().toISOString() }
+        : g
+    );
+
+    setCustomGames(updatedGames);
+    showNotification(`Saved items to "${customGame.name}"`, 'success');
+  };
+
+  const deleteCustomGame = (gameId) => {
+    const game = customGames.find(g => g.id === gameId);
+    if (!game) return;
+
+    const updatedGames = customGames.filter(g => g.id !== gameId);
+    setCustomGames(updatedGames);
+
+    if (currentGame === gameId) {
+      setCurrentGame(GAMES.CUSTOM);
+      setItems([]);
+    }
+
+    showNotification(`Deleted game "${game.name}"`, 'success');
+  };
+
+  const renameCustomGame = (gameId, newName) => {
+    if (!newName.trim()) {
+      showNotification('Game name cannot be empty', 'error');
+      return;
+    }
+
+    const updatedGames = customGames.map(g => 
+      g.id === gameId 
+        ? { ...g, name: newName.trim(), updatedAt: new Date().toISOString() }
+        : g
+    );
+
+    setCustomGames(updatedGames);
+    setEditingGameId(null);
+    setEditingGameName('');
+    showNotification(`Renamed to "${newName.trim()}"`, 'success');
+  };
+
+  const getAllAvailableGames = () => {
+    const baseGames = getAvailableGames();
+    const customGamesList = customGames.map(g => ({
+      id: g.id,
+      name: g.name,
+      isCustom: true
+    }));
+    
+    return [...baseGames, ...customGamesList];
+  };
+
+  const getCurrentGameName = () => {
+    const customGame = customGames.find(g => g.id === currentGame);
+    if (customGame) return customGame.name;
+    return getGameName(currentGame);
+  };
+
+  const filterResourceTree = () => {
+    if (!targetItem || !results) {
+      showNotification('Please select a target item first', 'error');
+      return;
+    }
+    handleSelectItem(null); // Clear any selected item to avoid interference
+    setShowResourceTree(true);
+    // Trigger recalculation with filtered items
+    calculateFilteredTree();
+  };
+
+  const calculateFilteredTree = () => {
+    if (!targetItem) return;
+
+    // Build dependency tree - get only items needed for target
+    const itemMap = new Map();
+    items.forEach(item => itemMap.set(item.name, item));
+
+    const requiredItems = new Set();
+    const queue = [targetItem];
+    requiredItems.add(targetItem);
+    
+    while (queue.length > 0) {
+      const currentItemName = queue.shift();
+      const currentItem = itemMap.get(currentItemName);
+      
+      if (currentItem && currentItem.required) {
+        currentItem.required.forEach(req => {
+          if (req.item && !requiredItems.has(req.item)) {
+            requiredItems.add(req.item);
+            queue.push(req.item);
+          }
+        });
+      }
+    }
+
+    // Create filtered items list with ONLY dependencies
+    const filteredItems = items.filter(item => requiredItems.has(item.name));
+    
+    // Modify the target item to have the desired factory count
+    const modifiedItems = filteredItems.map(item => {
+      if (item.name === targetItem) {
+        // This is a copy for calculation, we want it to be a final product
+        return { ...item };
+      }
+      return item;
+    });
+
+    // Calculate fresh with only these items - always use exact mode for filtering to get precise values
+    const filteredResult = calculateFactoryRequirements(modifiedItems, true);
+    
+    // Scale results based on desired factory count
+    const scale = targetFactoryCount / (filteredResult.factoryCount[targetItem] || 1);
+    const scaledFactoryCount = {};
+    const scaledEdgeContributions = {};
+    
+    Object.keys(filteredResult.factoryCount).forEach(itemName => {
+      const scaledValue = filteredResult.factoryCount[itemName] * scale;
+      scaledFactoryCount[itemName] = exactMode ? scaledValue : Math.ceil(scaledValue);
+    });
+    
+    Object.keys(filteredResult.edgeContributions).forEach(edgeKey => {
+      const scaledValue = filteredResult.edgeContributions[edgeKey] * scale;
+      scaledEdgeContributions[edgeKey] = exactMode ? scaledValue : Math.ceil(scaledValue);
+    });
+
+    setResults({
+      ...filteredResult,
+      factoryCount: scaledFactoryCount,
+      edgeContributions: scaledEdgeContributions,
+      isFiltered: true,
+      filteredFor: targetItem
+    });
+  };
+
+  const getFilteredResults = () => {
+    return results;
+  };
+
+  const getFilteredItems = () => {
+    if (showResourceTree && results?.isFiltered) {
+      // Only show items that have factory counts in the filtered result
+      return items.filter(item => results.factoryCount[item.name]);
+    }
+    return items;
   };
 
   const exportData = () => {
     const data = {
+      gameName: getCurrentGameName(),
+      gameId: currentGame,
       items,
       completedItems: Array.from(completedItems),
-      exportDate: new Date().toISOString()
+      exportDate: new Date().toISOString(),
+      version: '2.0'
     };
     
     const jsonString = JSON.stringify(data, null, 2);
@@ -480,7 +670,8 @@ export default function FactoryCalculator() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `factory-calculator-${new Date().toISOString().slice(0, 10)}.json`;
+    const fileName = `${getCurrentGameName().replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -497,13 +688,37 @@ export default function FactoryCalculator() {
         const data = JSON.parse(e.target.result);
         
         if (data.items && Array.isArray(data.items)) {
-          setItems(data.items);
+          // Check if this is a game export (version 2.0+)
+          if (data.version && data.gameName) {
+            // Create a new custom game with the imported data
+            const gameId = `custom-${Date.now()}`;
+            const newGame = {
+              id: gameId,
+              name: data.gameName + ' (Imported)',
+              items: data.items,
+              createdAt: new Date().toISOString()
+            };
+            
+            setCustomGames([...customGames, newGame]);
+            setItems(data.items);
+            setCurrentGame(gameId);
+            
+            if (data.completedItems && Array.isArray(data.completedItems)) {
+              setCompletedItems(new Set(data.completedItems));
+            }
+            
+            showNotification(`Imported game "${newGame.name}" successfully`, 'success');
+          } else {
+            // Legacy format - just load items
+            setItems(data.items);
+            
+            if (data.completedItems && Array.isArray(data.completedItems)) {
+              setCompletedItems(new Set(data.completedItems));
+            }
+            
+            showNotification('Data imported successfully (legacy format)', 'success');
+          }
         }
-        
-        if (data.completedItems && Array.isArray(data.completedItems)) {
-          setCompletedItems(new Set(data.completedItems));
-        }
-        showNotification('Data imported successfully', 'success');
       } catch (error) {
         console.error('Error importing data:', error);
         showNotification('Error importing data', 'error');
@@ -568,53 +783,184 @@ export default function FactoryCalculator() {
             </div>
           </div>
           
-          {/* Save/Load Buttons */}
+          {/* Exact Mode Toggle */}
+          <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Exact Mode</span>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                  Use precise floats instead of rounding up factory counts
+                </p>
+              </div>
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={exactMode}
+                  onChange={(e) => setExactMode(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`w-11 h-6 rounded-full transition ${
+                  exactMode ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}>
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transform transition ${
+                    exactMode ? 'translate-x-5' : 'translate-x-0.5'
+                  } mt-0.5`}></div>
+                </div>
+              </div>
+            </label>
+          </div>
+          
+          {/* Game Selection */}
           <div className="mb-3">
-            <div className="flex gap-2">
-              <button
-                onClick={createNew}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition text-sm font-medium"
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <Gamepad2 size={14} className="inline mr-1" />
+              Game Template
+            </label>
+            <div className="flex gap-2 mb-2">
+              <select
+                value={currentGame}
+                onChange={(e) => setCurrentGame(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
               >
-                <Plus size={16} />
-                New
-              </button>
+                {getAllAvailableGames().map(game => (
+                  <option key={game.id} value={game.id}>
+                    {game.name} {game.isCustom ? '★' : ''}
+                  </option>
+                ))}
+              </select>
               <button
-                onClick={() => setShowSaveDialog(true)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition text-sm font-medium"
+                onClick={() => loadGameTemplate(currentGame)}
+                className="px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition text-sm font-medium"
+                title="Load game items"
               >
-                <Save size={16} />
-                Save
-              </button>
-              <button
-                onClick={() => setShowLoadDialog(true)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition text-sm font-medium"
-              >
-                <FolderOpen size={16} />
                 Load
               </button>
             </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowGameManager(true)}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition text-sm font-medium"
+              >
+                <Edit2 size={14} />
+                Manage Games
+              </button>
+              {currentGame.startsWith('custom-') && (
+                <button
+                  onClick={saveCurrentGameItems}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition text-sm font-medium"
+                  title="Save current items to this game"
+                >
+                  <Save size={14} />
+                  Update Game
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Resource Tree Filter */}
+          {items.length > 0 && (
+            <div className="mb-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-md border border-purple-200 dark:border-purple-800">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <Filter size={14} className="inline mr-1" />
+                Resource Tree Filter
+              </label>
+              <div className="space-y-2">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={targetItem || itemSearchQuery}
+                    onChange={(e) => {
+                      setItemSearchQuery(e.target.value);
+                      setTargetItem(null);
+                      setShowItemDropdown(true);
+                    }}
+                    onFocus={() => setShowItemDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowItemDropdown(false), 200)}
+                    placeholder="Search and select item..."
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  />
+                  {showItemDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {items
+                        .filter(item => !itemSearchQuery || item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()))
+                        .map((item, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setTargetItem(item.name);
+                              setItemSearchQuery('');
+                              setShowItemDropdown(false);
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 text-gray-800 dark:text-gray-200 text-sm transition"
+                          >
+                            {item.name}
+                          </button>
+                        ))}
+                      {items.filter(item => !itemSearchQuery || item.name.toLowerCase().includes(itemSearchQuery.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">
+                          No items found
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {targetItem && (
+                  <div className="space-y-2">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        value={targetFactoryCount}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '') {
+                            setTargetFactoryCount('');
+                          } else {
+                            const num = parseInt(value);
+                            setTargetFactoryCount(isNaN(num) ? 1 : Math.max(1, num));
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '') {
+                            setTargetFactoryCount(1);
+                          }
+                        }}
+                        className="w-16 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                        min="1"
+                        max="999"
+                        step="1"
+                      />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">factories</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={filterResourceTree}
+                        className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition text-sm font-medium whitespace-nowrap"
+                      >
+                        {showResourceTree ? 'Update' : 'Show'} Tree
+                      </button>
+                      {showResourceTree && (
+                        <button
+                          onClick={() => {
+                            setShowResourceTree(false);
+                            calculate(); // Recalculate full tree
+                          }}
+                          className="px-3 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition text-sm font-medium"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {showResourceTree && targetItem && (
+                <div className="mt-2 text-xs text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/30 px-2 py-1 rounded">
+                  Showing tree for: {targetItem} ({targetFactoryCount} factories)
+                </div>
+              )}
+            </div>
+          )}
           
-          {/* Export/Import Buttons */}
-          <div className="flex gap-2">
-            <button
-              onClick={exportData}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition text-sm font-medium"
-            >
-              <Download size={16} />
-              Export
-            </button>
-            <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition text-sm font-medium cursor-pointer">
-              <Upload size={16} />
-              Import
-              <input
-                type="file"
-                accept=".json"
-                onChange={importData}
-                className="hidden"
-              />
-            </label>
-          </div>
         </div>
         
         <div className="space-y-4 mb-6 flex-shrink-0">
@@ -696,141 +1042,8 @@ export default function FactoryCalculator() {
             Add Item
           </button>
         </div>
-
-        <div className="border-t dark:border-gray-700 pt-4 flex-1 flex flex-col min-h-0">
-          <h2 className="text-lg font-semibold mb-3 flex-shrink-0 text-gray-800 dark:text-gray-100">Items ({items.length})</h2>
-          <div className="space-y-2 overflow-y-auto flex-1">
-            {items.map((item, index) => (
-              <div 
-                key={index} 
-                className={`border rounded-md p-2 cursor-pointer transition ${
-                  selectedItem === item.name ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-400' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-                onClick={() => setSelectedItem(selectedItem === item.name ? null : item.name)}
-              >
-                <div className="flex justify-between items-start">
-                  <span className="font-medium text-sm text-gray-800 dark:text-gray-200">{item.name}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeItem(index);
-                    }}
-                    className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 p-1 rounded transition"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  {item.output} in {item.time}s
-                  {item.required.length > 0 && ` • ${item.required.length} inputs`}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
         </div>
       </div>
-
-      {/* Save Dialog */}
-      {showSaveDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSaveDialog(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Save Current Work</h2>
-            
-            {currentSaveId && (
-              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-md">
-                <div className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                  Currently editing: {saves.find(s => s.id === currentSaveId)?.name}
-                </div>
-                <button
-                  onClick={() => saveCurrentWork(true)}
-                  className="mt-2 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition font-medium"
-                >
-                  Overwrite Save
-                </button>
-              </div>
-            )}
-            
-            <div className={currentSaveId ? "pt-3 border-t dark:border-gray-700" : ""}>
-              {currentSaveId && (
-                <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Or save as new:</div>
-              )}
-              <input
-                type="text"
-                value={newSaveName}
-                onChange={(e) => setNewSaveName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && newSaveName.trim() && saveCurrentWork(false)}
-                placeholder="Save name..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                autoFocus={!currentSaveId}
-              />
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => {
-                    setShowSaveDialog(false);
-                    setNewSaveName('');
-                  }}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => saveCurrentWork(false)}
-                  disabled={!newSaveName.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Save as New
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Load Dialog */}
-      {showLoadDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowLoadDialog(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Load Save</h2>
-            {saves.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400 text-center py-4">No saves yet</p>
-            ) : (
-              <div className="space-y-2">
-                {saves.map(save => (
-                  <div key={save.id} className="flex items-center gap-2 p-3 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <button
-                      onClick={() => loadSave(save.id)}
-                      className="flex-1 text-left"
-                    >
-                      <div className="font-medium text-gray-800 dark:text-gray-200">{save.name}</div>
-                      {save.date && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {new Date(save.date).toLocaleString()}
-                        </div>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => deleteSave(save.id)}
-                      className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition"
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2 justify-end mt-4">
-              <button
-                onClick={() => setShowLoadDialog(false)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-200"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirmation && (
@@ -895,6 +1108,167 @@ export default function FactoryCalculator() {
         </div>
       )}
 
+      {/* Game Manager Dialog */}
+      {showGameManager && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowGameManager(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-[600px] max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100 flex items-center gap-2">
+              <Gamepad2 size={24} />
+              Manage Games
+            </h2>
+
+            {/* Create New Game */}
+            <div className="mb-6 p-4 bg-teal-50 dark:bg-teal-900/20 rounded-lg border border-teal-200 dark:border-teal-800">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">Create New Game</h3>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={newGameName}
+                  onChange={(e) => setNewGameName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && newGameName.trim() && createCustomGame()}
+                  placeholder="Game name (e.g., Factorio, Dyson Sphere)"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+                <button
+                  onClick={createCustomGame}
+                  disabled={!newGameName.trim()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus size={16} />
+                  Create Game (with current items)
+                </button>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  This will create a new game template with your current items. You can add/edit items later.
+                </p>
+              </div>
+            </div>
+
+            {/* Import/Export Game Data */}
+            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">Import/Export Game Data</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={exportData}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition font-medium"
+                >
+                  <Download size={16} />
+                  Export Current
+                </button>
+                <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition font-medium cursor-pointer">
+                  <Upload size={16} />
+                  Import Data
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={importData}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                Export your current items or import from a file
+              </p>
+            </div>
+
+            {/* Built-in Games */}
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">Built-in Templates</h3>
+              <div className="space-y-2">
+                {getAvailableGames().map(game => (
+                  <div key={game.id} className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900/30">
+                    <Gamepad2 size={16} className="text-gray-400" />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-800 dark:text-gray-200">{game.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {game.id === GAMES.SATISFACTORY ? '80+ items included' : 'Empty template'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Games */}
+            {customGames.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">Your Custom Games</h3>
+                <div className="space-y-2">
+                  {customGames.map(game => (
+                    <div key={game.id} className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <Gamepad2 size={16} className="text-teal-600 dark:text-teal-400" />
+                      <div className="flex-1">
+                        {editingGameId === game.id ? (
+                          <input
+                            type="text"
+                            value={editingGameName}
+                            onChange={(e) => setEditingGameName(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                renameCustomGame(game.id, editingGameName);
+                              } else if (e.key === 'Escape') {
+                                setEditingGameId(null);
+                                setEditingGameName('');
+                              }
+                            }}
+                            onBlur={() => renameCustomGame(game.id, editingGameName)}
+                            className="w-full px-2 py-1 border border-teal-300 dark:border-teal-600 rounded focus:ring-2 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-medium"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="font-medium text-gray-800 dark:text-gray-200">{game.name}</div>
+                        )}
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {game.items?.length || 0} items
+                        </div>
+                      </div>
+                      {editingGameId !== game.id && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setEditingGameId(game.id);
+                              setEditingGameName(game.name);
+                            }}
+                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition"
+                            title="Rename game"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              loadGameTemplate(game.id);
+                              setShowGameManager(false);
+                            }}
+                            className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition text-sm font-medium"
+                          >
+                            Load
+                          </button>
+                          <button
+                            onClick={() => deleteCustomGame(game.id)}
+                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition"
+                            title="Delete game"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end pt-4 border-t dark:border-gray-700">
+              <button
+                onClick={() => setShowGameManager(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Right Panel - Graph */}
       <div className="flex-1 relative bg-gray-100 dark:bg-gray-950">
         {isPanelCollapsed && (
@@ -908,7 +1282,18 @@ export default function FactoryCalculator() {
             </button>
           </div>
         )}
-        <div className="absolute top-4 right-4 flex gap-2 z-10">
+        {isRightPanelCollapsed && (
+          <div className="absolute top-4 right-4 z-10">
+            <button 
+              onClick={() => setIsRightPanelCollapsed(false)} 
+              className="p-2 bg-white dark:bg-gray-800 rounded-md shadow hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200"
+              title="Show items panel"
+            >
+              <Menu size={20} />
+            </button>
+          </div>
+        )}
+        <div className={`absolute top-4 ${isRightPanelCollapsed ? 'right-20' : 'right-4'} flex gap-2 z-10`}>
           <button onClick={handleZoomIn} className="p-2 bg-white dark:bg-gray-800 rounded-md shadow hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200">
             <ZoomIn size={20} />
           </button>
@@ -920,13 +1305,21 @@ export default function FactoryCalculator() {
         {selectedItem && (
           <div className={`absolute top-4 ${isPanelCollapsed ? 'left-20' : 'left-4'} bg-white dark:bg-gray-800 rounded-md shadow-lg p-4 z-10 max-w-sm`}>
             <div className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">{selectedItem}</div>
-            {results && results.factoryCount[selectedItem] && (
-              <div className="space-y-1">
-                <div className="text-xs text-gray-600 dark:text-gray-400">
-                  Factories: {results.factoryCount[selectedItem]}
+            {(() => {
+              const displayResults = getFilteredResults();
+              return displayResults && displayResults.factoryCount[selectedItem] && (
+                <div className="space-y-1">
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    Factories: {displayResults.factoryCount[selectedItem]}
+                  </div>
+                  {showResourceTree && targetItem && (
+                    <div className="text-xs text-purple-600 dark:text-purple-400">
+                      (Filtered for {targetItem})
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
@@ -937,20 +1330,21 @@ export default function FactoryCalculator() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          onWheel={handleWheel}
           onClick={() => setContextMenu(null)}
         >
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
             <GraphVisualization 
-              results={results} 
-              items={items}
+              results={getFilteredResults()} 
+              items={getFilteredItems()}
               selectedItem={selectedItem}
-              onSelectItem={setSelectedItem}
+              onSelectItem={handleSelectItem}
               onEditItem={openEditModal}
               completedItems={completedItems}
               onToggleCompletion={toggleItemCompletion}
               contextMenu={contextMenu}
               setContextMenu={setContextMenu}
+              onCenterNode={centerOnNode}
+              onAnimatePan={handleAnimatePan}
             />
           </g>
         </svg>
@@ -1100,13 +1494,61 @@ export default function FactoryCalculator() {
           </div>
         )}
       </div>
+
+      {/* Right Panel - Items List */}
+      <div className={`${isRightPanelCollapsed ? 'w-0' : 'w-96'} transition-all duration-300 bg-white dark:bg-gray-800 shadow-lg overflow-hidden flex flex-col`}>
+        <div className="w-96 p-6 flex flex-col h-full">
+          <div className="mb-6 flex-shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <button 
+                onClick={() => setIsRightPanelCollapsed(true)} 
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition"
+                title="Hide panel"
+              >
+                <Menu size={20} className="text-gray-600 dark:text-gray-300" />
+              </button>
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Items ({items.length})</h2>
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="space-y-2 overflow-y-auto flex-1">
+              {items.map((item, index) => (
+                <div 
+                  key={index} 
+                  className={`border rounded-md p-2 cursor-pointer transition ${
+                    selectedItem === item.name ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-400' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+                  onClick={() => handleSelectItem(selectedItem === item.name ? null : item.name)}
+                >
+                  <div className="flex justify-between items-start">
+                    <span className="font-medium text-sm text-gray-800 dark:text-gray-200">{item.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeItem(index);
+                      }}
+                      className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 p-1 rounded transition"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    {item.output} in {item.time}s
+                    {item.required.length > 0 && ` • ${item.required.length} inputs`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
       </>
       )}
     </div>
   );
 }
 
-function GraphVisualization({ results, items, selectedItem, onSelectItem, onEditItem, completedItems, onToggleCompletion, contextMenu, setContextMenu }) {
+function GraphVisualization({ results, items, selectedItem, onSelectItem, onEditItem, completedItems, onToggleCompletion, contextMenu, setContextMenu, onCenterNode, onAnimatePan }) {
   const [layout, setLayout] = useState(null);
   const [fullLayout, setFullLayout] = useState(null);
   const [focusedLayout, setFocusedLayout] = useState(null);
@@ -1355,6 +1797,20 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
 
         setLayout({ nodes: newNodes, links: targetLayout.links });
         setAnimatedLayout({ nodes: newNodes, links: targetLayout.links });
+        
+        // Pan viewport during animation
+        if (onAnimatePan) {
+          if (selectedItem) {
+            // Selecting: keep selected node in place
+            const selectedNode = newNodes.find(n => n.id === selectedItem);
+            if (selectedNode) {
+              onAnimatePan(selectedNode.x, selectedNode.y, eased, false);
+            }
+          } else {
+            // Deselecting: animate back to original pan position
+            onAnimatePan(0, 0, eased, true);
+          }
+        }
       }
 
       if (progress < 1) {
@@ -1463,7 +1919,9 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
                   style={{ pointerEvents: 'none' }}
                 >
                   {link.factoriesForEdge !== null && link.factoriesForEdge !== undefined
-                    ? `${link.factoriesForEdge} factories`
+                    ? (link.factoriesForEdge % 1 === 0 
+                        ? `${link.factoriesForEdge} factories`
+                        : `${link.factoriesForEdge.toFixed(2)} factories`)
                     : (link.perFactoryRate % 1 === 0 
                         ? `${link.perFactoryRate}/s`
                         : `${link.perFactoryRate.toFixed(2)}/s`)}
@@ -1478,7 +1936,9 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
                   style={{ pointerEvents: 'none' }}
                 >
                   {link.factoriesForEdge !== null && link.factoriesForEdge !== undefined
-                    ? `${link.factoriesForEdge} factories`
+                    ? (link.factoriesForEdge % 1 === 0 
+                        ? `${link.factoriesForEdge} factories`
+                        : `${link.factoriesForEdge.toFixed(2)} factories`)
                     : (link.perFactoryRate % 1 === 0 
                         ? `${link.perFactoryRate}/s`
                         : `${link.perFactoryRate.toFixed(2)}/s`)}
@@ -1528,7 +1988,13 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
               strokeDasharray={isDeleted ? "5,3" : "none"}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelectItem(isSelected ? null : node.id);
+                // Store node position info before selecting it
+                if (!isSelected && onCenterNode) {
+                  const posInfo = onCenterNode(node.x, node.y);
+                  onSelectItem(isSelected ? null : node.id, posInfo);
+                } else {
+                  onSelectItem(isSelected ? null : node.id);
+                }
               }}
               onContextMenu={(e) => {
                 e.preventDefault();
