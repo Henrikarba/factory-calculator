@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Upload, Menu, Save, FolderOpen, X, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Upload, Menu, Save, FolderOpen, X, AlertCircle, Moon, Sun } from 'lucide-react';
 import { calculateFactoryRequirements, calculateEdgeFactories, calculatePerFactoryRate } from './calculations';
 
 export default function FactoryCalculator() {
@@ -30,6 +30,10 @@ export default function FactoryCalculator() {
   const [notifications, setNotifications] = useState([]);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [currentSaveId, setCurrentSaveId] = useState(null);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('factory-dark-mode');
+    return saved ? JSON.parse(saved) : false;
+  });
 
   const showNotification = (message, type = 'error') => {
     const id = Date.now();
@@ -38,6 +42,16 @@ export default function FactoryCalculator() {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 3000);
   };
+
+  // Dark mode effect
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('factory-dark-mode', JSON.stringify(isDarkMode));
+  }, [isDarkMode]);
 
   // Load saves list and current work on mount
   useEffect(() => {
@@ -500,7 +514,7 @@ export default function FactoryCalculator() {
   };
 
   return (
-    <div className="h-screen flex bg-gray-50">
+    <div className="h-screen flex bg-gray-50 dark:bg-gray-900">
       {/* Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {notifications.map(notification => (
@@ -531,18 +545,27 @@ export default function FactoryCalculator() {
       ) : (
         <>
       {/* Left Panel - Input */}
-      <div className={`${isPanelCollapsed ? 'w-0' : 'w-96'} transition-all duration-300 bg-white shadow-lg overflow-hidden flex flex-col`}>
+      <div className={`${isPanelCollapsed ? 'w-0' : 'w-96'} transition-all duration-300 bg-white dark:bg-gray-800 shadow-lg overflow-hidden flex flex-col`}>
         <div className="w-96 p-6 flex flex-col h-full">
         <div className="mb-6 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-2xl font-bold text-gray-800">Factory Calculator</h1>
-            <button 
-              onClick={() => setIsPanelCollapsed(true)} 
-              className="p-1.5 hover:bg-gray-100 rounded-md transition"
-              title="Hide panel"
-            >
-              <Menu size={20} className="text-gray-600" />
-            </button>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Factory Calculator</h1>
+            <div className="flex gap-1">
+              <button 
+                onClick={() => setIsDarkMode(!isDarkMode)} 
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition"
+                title={isDarkMode ? "Light mode" : "Dark mode"}
+              >
+                {isDarkMode ? <Sun size={20} className="text-gray-600 dark:text-gray-300" /> : <Moon size={20} className="text-gray-600" />}
+              </button>
+              <button 
+                onClick={() => setIsPanelCollapsed(true)} 
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition"
+                title="Hide panel"
+              >
+                <Menu size={20} className="text-gray-600 dark:text-gray-300" />
+              </button>
+            </div>
           </div>
           
           {/* Save/Load Buttons */}
@@ -596,35 +619,35 @@ export default function FactoryCalculator() {
         
         <div className="space-y-4 mb-6 flex-shrink-0">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item Name</label>
             <input
               type="text"
               value={currentItem.name}
               onChange={(e) => setCurrentItem({ ...currentItem, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               placeholder="e.g., iron_rod"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Output</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Output</label>
               <input
                 type="number"
                 value={currentItem.output}
                 onChange={(e) => setCurrentItem({ ...currentItem, output: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 min="0.1"
                 step="0.1"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Time (s)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time (s)</label>
               <input
                 type="number"
                 value={currentItem.time}
                 onChange={(e) => setCurrentItem({ ...currentItem, time: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 min="0.1"
                 step="0.1"
               />
@@ -632,27 +655,27 @@ export default function FactoryCalculator() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Required Items</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Required Items</label>
             {currentItem.required.map((req, index) => (
               <div key={index} className="flex gap-2 mb-2">
                 <input
                   type="text"
                   value={req.item}
                   onChange={(e) => updateRequirement(index, 'item', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   placeholder="Item name"
                 />
                 <input
                   type="number"
                   value={req.count}
                   onChange={(e) => updateRequirement(index, 'count', e.target.value)}
-                  className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   min="0.1"
                   step="0.1"
                 />
                 <button
                   onClick={() => removeRequirement(index)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded-md transition"
+                  className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md transition"
                 >
                   <Trash2 size={20} />
                 </button>
@@ -660,7 +683,7 @@ export default function FactoryCalculator() {
             ))}
             <button
               onClick={addRequirement}
-              className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+              className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
             >
               <Plus size={16} /> Add Requirement
             </button>
@@ -674,30 +697,30 @@ export default function FactoryCalculator() {
           </button>
         </div>
 
-        <div className="border-t pt-4 flex-1 flex flex-col min-h-0">
-          <h2 className="text-lg font-semibold mb-3 flex-shrink-0">Items ({items.length})</h2>
+        <div className="border-t dark:border-gray-700 pt-4 flex-1 flex flex-col min-h-0">
+          <h2 className="text-lg font-semibold mb-3 flex-shrink-0 text-gray-800 dark:text-gray-100">Items ({items.length})</h2>
           <div className="space-y-2 overflow-y-auto flex-1">
             {items.map((item, index) => (
               <div 
                 key={index} 
                 className={`border rounded-md p-2 cursor-pointer transition ${
-                  selectedItem === item.name ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  selectedItem === item.name ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-400' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
                 onClick={() => setSelectedItem(selectedItem === item.name ? null : item.name)}
               >
                 <div className="flex justify-between items-start">
-                  <span className="font-medium text-sm text-gray-800">{item.name}</span>
+                  <span className="font-medium text-sm text-gray-800 dark:text-gray-200">{item.name}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       removeItem(index);
                     }}
-                    className="text-red-600 hover:bg-red-50 p-1 rounded transition"
+                    className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 p-1 rounded transition"
                   >
                     <Trash2 size={14} />
                   </button>
                 </div>
-                <div className="text-xs text-gray-600 mt-1">
+                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                   {item.output} in {item.time}s
                   {item.required.length > 0 && ` • ${item.required.length} inputs`}
                 </div>
@@ -711,12 +734,12 @@ export default function FactoryCalculator() {
       {/* Save Dialog */}
       {showSaveDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSaveDialog(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold mb-4">Save Current Work</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Save Current Work</h2>
             
             {currentSaveId && (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <div className="text-sm font-medium text-blue-900">
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-md">
+                <div className="text-sm font-medium text-blue-900 dark:text-blue-100">
                   Currently editing: {saves.find(s => s.id === currentSaveId)?.name}
                 </div>
                 <button
@@ -728,9 +751,9 @@ export default function FactoryCalculator() {
               </div>
             )}
             
-            <div className={currentSaveId ? "pt-3 border-t" : ""}>
+            <div className={currentSaveId ? "pt-3 border-t dark:border-gray-700" : ""}>
               {currentSaveId && (
-                <div className="text-sm font-medium text-gray-700 mb-2">Or save as new:</div>
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Or save as new:</div>
               )}
               <input
                 type="text"
@@ -738,7 +761,7 @@ export default function FactoryCalculator() {
                 onChange={(e) => setNewSaveName(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && newSaveName.trim() && saveCurrentWork(false)}
                 placeholder="Save name..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 autoFocus={!currentSaveId}
               />
               <div className="flex gap-2 justify-end">
@@ -747,7 +770,7 @@ export default function FactoryCalculator() {
                     setShowSaveDialog(false);
                     setNewSaveName('');
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-200"
                 >
                   Cancel
                 </button>
@@ -767,28 +790,28 @@ export default function FactoryCalculator() {
       {/* Load Dialog */}
       {showLoadDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowLoadDialog(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-96 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold mb-4">Load Save</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Load Save</h2>
             {saves.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No saves yet</p>
+              <p className="text-gray-500 dark:text-gray-400 text-center py-4">No saves yet</p>
             ) : (
               <div className="space-y-2">
                 {saves.map(save => (
-                  <div key={save.id} className="flex items-center gap-2 p-3 border border-gray-200 rounded-md hover:bg-gray-50">
+                  <div key={save.id} className="flex items-center gap-2 p-3 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700">
                     <button
                       onClick={() => loadSave(save.id)}
                       className="flex-1 text-left"
                     >
-                      <div className="font-medium text-gray-800">{save.name}</div>
+                      <div className="font-medium text-gray-800 dark:text-gray-200">{save.name}</div>
                       {save.date && (
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
                           {new Date(save.date).toLocaleString()}
                         </div>
                       )}
                     </button>
                     <button
                       onClick={() => deleteSave(save.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded transition"
+                      className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition"
                       title="Delete"
                     >
                       <Trash2 size={16} />
@@ -800,7 +823,7 @@ export default function FactoryCalculator() {
             <div className="flex gap-2 justify-end mt-4">
               <button
                 onClick={() => setShowLoadDialog(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-200"
               >
                 Close
               </button>
@@ -812,24 +835,24 @@ export default function FactoryCalculator() {
       {/* Delete Confirmation Dialog */}
       {deleteConfirmation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setDeleteConfirmation(null)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-[500px]" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-[500px]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-3 mb-4">
-              <div className="p-2 bg-red-100 rounded-full">
-                <AlertCircle className="text-red-600" size={24} />
+              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-full">
+                <AlertCircle className="text-red-600 dark:text-red-400" size={24} />
               </div>
               <div className="flex-1">
-                <h2 className="text-xl font-semibold text-gray-900">Delete "{deleteConfirmation.itemName}"?</h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Delete "{deleteConfirmation.itemName}"?</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   This item is referenced by {deleteConfirmation.referencingItems.length} other item{deleteConfirmation.referencingItems.length > 1 ? 's' : ''}:
                 </p>
               </div>
             </div>
             
-            <div className="bg-gray-50 rounded-md p-3 mb-4 max-h-32 overflow-y-auto">
-              <ul className="text-sm text-gray-700 space-y-1">
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-md p-3 mb-4 max-h-32 overflow-y-auto">
+              <ul className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
                 {deleteConfirmation.referencingItems.map((name, idx) => (
                   <li key={idx} className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
+                    <span className="w-1.5 h-1.5 bg-gray-400 dark:bg-gray-500 rounded-full"></span>
                     {name}
                   </li>
                 ))}
@@ -863,7 +886,7 @@ export default function FactoryCalculator() {
               
               <button
                 onClick={() => setDeleteConfirmation(null)}
-                className="w-full bg-gray-200 text-gray-700 py-2.5 px-4 rounded-md hover:bg-gray-300 font-medium transition"
+                className="w-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2.5 px-4 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 font-medium transition"
               >
                 Cancel
               </button>
@@ -873,12 +896,12 @@ export default function FactoryCalculator() {
       )}
 
       {/* Right Panel - Graph */}
-      <div className="flex-1 relative bg-gray-100">
+      <div className="flex-1 relative bg-gray-100 dark:bg-gray-950">
         {isPanelCollapsed && (
           <div className="absolute top-4 left-4 z-10">
             <button 
               onClick={() => setIsPanelCollapsed(false)} 
-              className="p-2 bg-white rounded-md shadow hover:bg-gray-50"
+              className="p-2 bg-white dark:bg-gray-800 rounded-md shadow hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200"
               title="Show panel"
             >
               <Menu size={20} />
@@ -886,20 +909,20 @@ export default function FactoryCalculator() {
           </div>
         )}
         <div className="absolute top-4 right-4 flex gap-2 z-10">
-          <button onClick={handleZoomIn} className="p-2 bg-white rounded-md shadow hover:bg-gray-50">
+          <button onClick={handleZoomIn} className="p-2 bg-white dark:bg-gray-800 rounded-md shadow hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200">
             <ZoomIn size={20} />
           </button>
-          <button onClick={handleZoomOut} className="p-2 bg-white rounded-md shadow hover:bg-gray-50">
+          <button onClick={handleZoomOut} className="p-2 bg-white dark:bg-gray-800 rounded-md shadow hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200">
             <ZoomOut size={20} />
           </button>
         </div>
 
         {selectedItem && (
-          <div className={`absolute top-4 ${isPanelCollapsed ? 'left-20' : 'left-4'} bg-white rounded-md shadow-lg p-4 z-10 max-w-sm`}>
-            <div className="text-sm font-semibold text-gray-800 mb-2">{selectedItem}</div>
+          <div className={`absolute top-4 ${isPanelCollapsed ? 'left-20' : 'left-4'} bg-white dark:bg-gray-800 rounded-md shadow-lg p-4 z-10 max-w-sm`}>
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">{selectedItem}</div>
             {results && results.factoryCount[selectedItem] && (
               <div className="space-y-1">
-                <div className="text-xs text-gray-600">
+                <div className="text-xs text-gray-600 dark:text-gray-400">
                   Factories: {results.factoryCount[selectedItem]}
                 </div>
               </div>
@@ -935,12 +958,12 @@ export default function FactoryCalculator() {
         {/* Context Menu */}
         {contextMenu && (
           <div 
-            className="absolute bg-white rounded-md shadow-lg border border-gray-200 py-1 z-30"
+            className="absolute bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-30"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-800 dark:text-gray-200"
               onClick={() => {
                 toggleItemCompletion(contextMenu.itemName);
                 setContextMenu(null);
@@ -948,18 +971,18 @@ export default function FactoryCalculator() {
             >
               {completedItems.has(contextMenu.itemName) ? (
                 <>
-                  <span className="text-gray-600">☐</span>
+                  <span className="text-gray-600 dark:text-gray-400">☐</span>
                   <span>Mark as Incomplete</span>
                 </>
               ) : (
                 <>
-                  <span className="text-green-600">☑</span>
+                  <span className="text-green-600 dark:text-green-400">☑</span>
                   <span>Mark as Complete</span>
                 </>
               )}
             </button>
             <button
-              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-800 dark:text-gray-200"
               onClick={() => {
                 openEditModal(contextMenu.itemName);
                 setContextMenu(null);
@@ -974,40 +997,40 @@ export default function FactoryCalculator() {
         {/* Edit Modal */}
         {editingItem && editForm && (
           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-96 max-h-[80vh] overflow-y-auto">
-              <h2 className="text-xl font-bold mb-4">Edit Item</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96 max-h-[80vh] overflow-y-auto">
+              <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">Edit Item</h2>
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item Name</label>
                   <input
                     type="text"
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                     disabled
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Output</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Output</label>
                     <input
                       type="number"
                       value={editForm.output}
                       onChange={(e) => setEditForm({ ...editForm, output: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       min="0.1"
                       step="0.1"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Time (s)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time (s)</label>
                     <input
                       type="number"
                       value={editForm.time}
                       onChange={(e) => setEditForm({ ...editForm, time: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       min="0.1"
                       step="0.1"
                     />
@@ -1015,27 +1038,27 @@ export default function FactoryCalculator() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Required Items</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Required Items</label>
                   {editForm.required.map((req, index) => (
                     <div key={index} className="flex gap-2 mb-2">
                       <input
                         type="text"
                         value={req.item}
                         onChange={(e) => updateEditRequirement(index, 'item', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         placeholder="Item name"
                       />
                       <input
                         type="number"
                         value={req.count}
                         onChange={(e) => updateEditRequirement(index, 'count', e.target.value)}
-                        className="w-20 px-3 py-2 border border-gray-300 rounded-md"
+                        className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         min="0.1"
                         step="0.1"
                       />
                       <button
                         onClick={() => removeEditRequirement(index)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-md"
+                        className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md"
                       >
                         <Trash2 size={20} />
                       </button>
@@ -1043,7 +1066,7 @@ export default function FactoryCalculator() {
                   ))}
                   <button
                     onClick={addEditRequirement}
-                    className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
+                    className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm"
                   >
                     <Plus size={16} /> Add Requirement
                   </button>
@@ -1058,7 +1081,7 @@ export default function FactoryCalculator() {
                   </button>
                   <button
                     onClick={cancelEdit}
-                    className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-md hover:bg-gray-300 font-medium"
+                    className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 font-medium"
                   >
                     Cancel
                   </button>
@@ -1069,7 +1092,7 @@ export default function FactoryCalculator() {
         )}
 
         {!results && items.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+          <div className="absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500">
             <div className="text-center">
               <div className="text-lg font-medium">Add items to see the production graph</div>
               <div className="text-sm mt-2">Items will auto-calculate and display here</div>
@@ -1380,7 +1403,17 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
           refY="3"
           orient="auto"
         >
-          <polygon points="0 0, 10 3, 0 6" fill="#666" />
+          <polygon points="0 0, 10 3, 0 6" fill="#666" className="dark:fill-gray-400" />
+        </marker>
+        <marker
+          id="arrowhead-dark"
+          markerWidth="10"
+          markerHeight="10"
+          refX="9"
+          refY="3"
+          orient="auto"
+        >
+          <polygon points="0 0, 10 3, 0 6" fill="#9ca3af" />
         </marker>
       </defs>
       
@@ -1410,30 +1443,47 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
               y1={sourceNode.y + 20}
               x2={targetNode.x}
               y2={targetNode.y - 20}
-              stroke={isHighlighted ? "#3b82f6" : "#999"}
+              stroke={isHighlighted ? "#3b82f6" : ""}
+              className={!isHighlighted ? "stroke-gray-600 dark:stroke-gray-500" : ""}
               strokeWidth={isHighlighted ? 3 : 2}
               markerEnd="url(#arrowhead)"
               opacity={selectedItem && !isHighlighted ? 0.2 : 1}
             />
             {selectedItem && isHighlighted && (
-              <text
-                x={midX}
-                y={midY}
-                textAnchor="middle"
-                fontSize="12"
-                fill="black"
-                fontWeight="700"
-                stroke="white"
-                strokeWidth="3"
-                paintOrder="stroke"
-                style={{ pointerEvents: 'none' }}
-              >
-                {link.factoriesForEdge !== null && link.factoriesForEdge !== undefined
-                  ? `${link.factoriesForEdge} factories`
-                  : (link.perFactoryRate % 1 === 0 
-                      ? `${link.perFactoryRate}/s`
-                      : `${link.perFactoryRate.toFixed(2)}/s`)}
-              </text>
+              <>
+                <text
+                  x={midX}
+                  y={midY}
+                  textAnchor="middle"
+                  fontSize="12"
+                  className="fill-white dark:fill-gray-900"
+                  fontWeight="700"
+                  strokeWidth="3"
+                  paintOrder="stroke"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {link.factoriesForEdge !== null && link.factoriesForEdge !== undefined
+                    ? `${link.factoriesForEdge} factories`
+                    : (link.perFactoryRate % 1 === 0 
+                        ? `${link.perFactoryRate}/s`
+                        : `${link.perFactoryRate.toFixed(2)}/s`)}
+                </text>
+                <text
+                  x={midX}
+                  y={midY}
+                  textAnchor="middle"
+                  fontSize="12"
+                  className="fill-black dark:fill-gray-100"
+                  fontWeight="700"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {link.factoriesForEdge !== null && link.factoriesForEdge !== undefined
+                    ? `${link.factoriesForEdge} factories`
+                    : (link.perFactoryRate % 1 === 0 
+                        ? `${link.perFactoryRate}/s`
+                        : `${link.perFactoryRate.toFixed(2)}/s`)}
+                </text>
+              </>
             )}
           </g>
         );
@@ -1466,8 +1516,14 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
               width={boxWidth}
               height="40"
               rx="6"
-              fill={isDeleted ? "#fecaca" : isPlaceholder ? "#fee2e2" : isCompleted ? "#d1fae5" : isSelected ? "#3b82f6" : "#fff"}
-              stroke={isDeleted ? "#b91c1c" : isPlaceholder ? "#dc2626" : isCompleted ? "#10b981" : isSelected ? "#2563eb" : "#d1d5db"}
+              fill={isDeleted ? "#fecaca" : isPlaceholder ? "#fee2e2" : isCompleted ? "#d1fae5" : isSelected ? "#3b82f6" : ""}
+              stroke={isDeleted ? "#b91c1c" : isPlaceholder ? "#dc2626" : isCompleted ? "#10b981" : isSelected ? "#2563eb" : ""}
+              className={
+                isDeleted ? "dark:fill-red-900/40 dark:stroke-red-700" :
+                isPlaceholder ? "dark:fill-red-900/30 dark:stroke-red-800" :
+                isCompleted ? "dark:fill-green-900/40 dark:stroke-green-700" :
+                !isSelected ? "fill-white dark:fill-gray-800 stroke-gray-300 dark:stroke-gray-600" : ""
+              }
               strokeWidth={isDeleted ? "3" : "2"}
               strokeDasharray={isDeleted ? "5,3" : "none"}
               onClick={(e) => {
@@ -1491,7 +1547,13 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
               y="-2"
               fontSize="13"
               fontWeight="600"
-              fill={isDeleted ? "#991b1b" : isPlaceholder ? "#dc2626" : isCompleted ? "#059669" : isSelected ? "#fff" : "#1f2937"}
+              fill={isDeleted ? "#991b1b" : isPlaceholder ? "#dc2626" : isCompleted ? "#059669" : isSelected ? "#fff" : ""}
+              className={
+                isDeleted ? "dark:fill-red-400" :
+                isPlaceholder ? "dark:fill-red-500" :
+                isCompleted ? "dark:fill-green-400" :
+                !isSelected ? "fill-gray-800 dark:fill-gray-100" : ""
+              }
               style={{ pointerEvents: 'none', textDecoration: isDeleted ? 'line-through' : 'none' }}
             >
               {node.id}
@@ -1500,7 +1562,13 @@ function GraphVisualization({ results, items, selectedItem, onSelectItem, onEdit
               textAnchor="middle"
               y="14"
               fontSize="11"
-              fill={isDeleted ? "#991b1b" : isPlaceholder ? "#dc2626" : isCompleted ? "#059669" : isSelected ? "#dbeafe" : "#6b7280"}
+              fill={isDeleted ? "#991b1b" : isPlaceholder ? "#dc2626" : isCompleted ? "#059669" : isSelected ? "#dbeafe" : ""}
+              className={
+                isDeleted ? "dark:fill-red-400" :
+                isPlaceholder ? "dark:fill-red-500" :
+                isCompleted ? "dark:fill-green-400" :
+                !isSelected ? "fill-gray-600 dark:fill-gray-400" : ""
+              }
               style={{ pointerEvents: 'none' }}
             >
               {isDeleted ? "DELETED" : isPlaceholder ? "?" : (factoryCount && (factoryCount % 1 === 0 
