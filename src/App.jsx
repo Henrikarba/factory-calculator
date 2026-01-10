@@ -128,22 +128,31 @@ export default function FactoryCalculator() {
     }
   }, [currentGame]);
 
-  // Load items on mount and when game changes
+  // Load items only when game changes (not when customGames updates from auto-save)
   useEffect(() => {
-    if (currentGame.startsWith('custom-')) {
-      const customGame = customGames.find(g => g.id === currentGame);
-      if (customGame && customGame.items) {
-        setItems(customGame.items);
-      } else {
+    const loadItems = () => {
+      if (currentGame.startsWith('custom-')) {
+        const saved = localStorage.getItem('factory-custom-games');
+        if (saved) {
+          const games = JSON.parse(saved);
+          const customGame = games.find(g => g.id === currentGame);
+          if (customGame && customGame.items) {
+            setItems(customGame.items);
+            setIsLoading(false);
+            return;
+          }
+        }
         setItems([]);
+      } else {
+        // Load game template items
+        const gameItems = getGameItems(currentGame);
+        setItems(gameItems);
       }
-    } else {
-      // Load game template items
-      const gameItems = getGameItems(currentGame);
-      setItems(gameItems);
-    }
-    setIsLoading(false);
-  }, [currentGame, customGames]);
+      setIsLoading(false);
+    };
+    
+    loadItems();
+  }, [currentGame]);
 
 
 
