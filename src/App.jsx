@@ -128,10 +128,22 @@ export default function FactoryCalculator() {
     }
   }, [currentGame]);
 
-  // Load on mount
+  // Load items on mount and when game changes
   useEffect(() => {
+    if (currentGame.startsWith('custom-')) {
+      const customGame = customGames.find(g => g.id === currentGame);
+      if (customGame && customGame.items) {
+        setItems(customGame.items);
+      } else {
+        setItems([]);
+      }
+    } else {
+      // Load game template items
+      const gameItems = getGameItems(currentGame);
+      setItems(gameItems);
+    }
     setIsLoading(false);
-  }, []);
+  }, [currentGame, customGames]);
 
 
 
