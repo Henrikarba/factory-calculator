@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Upload, Menu, X, AlertCircle, Moon, Sun, Filter, Edit2, Gamepad2, Save } from 'lucide-react';
+import { Trash2, Plus, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Upload, Menu, X, AlertCircle, Moon, Sun, Filter, Edit2, Gamepad2 } from 'lucide-react';
 import { calculateFactoryRequirements, calculateEdgeFactories, calculatePerFactoryRate } from './calculations';
 import { GAMES, getGameItems, getGameName, getAvailableGames } from './gameData';
 
@@ -87,6 +87,46 @@ export default function FactoryCalculator() {
   useEffect(() => {
     localStorage.setItem('factory-exact-mode', JSON.stringify(exactMode));
   }, [exactMode]);
+
+  // Auto-save items to current game
+  useEffect(() => {
+    if (isLoading) return; // Don't save during initial load
+    
+    if (currentGame.startsWith('custom-')) {
+      const customGame = customGames.find(g => g.id === currentGame);
+      if (customGame) {
+        const updatedGames = customGames.map(g => 
+          g.id === currentGame 
+            ? { ...g, items: [...items], updatedAt: new Date().toISOString() }
+            : g
+        );
+        setCustomGames(updatedGames);
+      }
+    }
+  }, [items, currentGame, isLoading]);
+
+  // Auto-save completed items
+  useEffect(() => {
+    if (isLoading) return; // Don't save during initial load
+    localStorage.setItem(`factory-completed-${currentGame}`, JSON.stringify(Array.from(completedItems)));
+  }, [completedItems, currentGame, isLoading]);
+
+  // Load completed items when game changes
+  useEffect(() => {
+    const saved = localStorage.getItem(`factory-completed-${currentGame}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setCompletedItems(new Set(parsed));
+        }
+      } catch (e) {
+        setCompletedItems(new Set());
+      }
+    } else {
+      setCompletedItems(new Set());
+    }
+  }, [currentGame]);
 
   // Load on mount
   useEffect(() => {
@@ -500,23 +540,7 @@ export default function FactoryCalculator() {
     showNotification(`Created game "${newGame.name}"`, 'success');
   };
 
-  const saveCurrentGameItems = () => {
-    const customGame = customGames.find(g => g.id === currentGame);
-    
-    if (!customGame) {
-      showNotification('Can only save items to custom games', 'error');
-      return;
-    }
 
-    const updatedGames = customGames.map(g => 
-      g.id === currentGame 
-        ? { ...g, items: [...items], updatedAt: new Date().toISOString() }
-        : g
-    );
-
-    setCustomGames(updatedGames);
-    showNotification(`Saved items to "${customGame.name}"`, 'success');
-  };
 
   const deleteCustomGame = (gameId) => {
     const game = customGames.find(g => g.id === gameId);
@@ -844,16 +868,6 @@ export default function FactoryCalculator() {
                 <Edit2 size={14} />
                 Manage Games
               </button>
-              {currentGame.startsWith('custom-') && (
-                <button
-                  onClick={saveCurrentGameItems}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition text-sm font-medium"
-                  title="Save current items to this game"
-                >
-                  <Save size={14} />
-                  Update Game
-                </button>
-              )}
             </div>
           </div>
 
