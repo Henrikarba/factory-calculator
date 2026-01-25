@@ -28,6 +28,12 @@ Toggle between two calculation modes:
 - **Ceiling Mode** (default): Rounds up factory counts (can't split factories)
 - **Exact Mode**: Uses precise float values for perfect resource balancing
 
+### Game-specific Settings
+Each game template has its own settings (click "Game Settings"):
+- **Exact Mode**: per-game exact vs ceiling calculations
+- **Time Unit**: choose whether time labels show seconds (s) or minutes (m) (visual only)
+- **Counts are per selected unit**: hide time input and treat item outputs as per-selected-unit counts (calculations internally use 60 seconds for minutes and 1 second for seconds)
+
 ### Game Storage
 - All items are saved directly to game templates
 - No separate save/load system needed

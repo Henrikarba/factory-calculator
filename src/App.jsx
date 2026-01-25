@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Upload, Menu, X, AlertCircle, Moon, Sun, Filter, Edit2, Gamepad2 } from 'lucide-react';
+import { Trash2, Plus, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, Upload, Menu, X, AlertCircle, Moon, Sun, Filter, Edit2, Settings, Gamepad2 } from 'lucide-react';
 import { calculateFactoryRequirements, calculateEdgeFactories, calculatePerFactoryRate } from './calculations';
 import { GAMES, getGameItems, getGameName, getAvailableGames } from './gameData';
 
@@ -29,9 +29,10 @@ export default function FactoryCalculator() {
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
-  const [exactMode, setExactMode] = useState(() => {
-    const saved = localStorage.getItem('factory-exact-mode');
-    return saved ? JSON.parse(saved) : false;
+  const defaultGameSettings = { exactMode: false, timeUnit: 's', countsPerTimeUnit: false };
+  const [gameSettings, setGameSettings] = useState(() => {
+    const saved = localStorage.getItem('factory-game-settings');
+    return saved ? JSON.parse(saved) : {};
   });
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('factory-dark-mode');
@@ -49,6 +50,7 @@ export default function FactoryCalculator() {
     return saved ? JSON.parse(saved) : [];
   });
   const [showGameManager, setShowGameManager] = useState(false);
+  const [showGameSettings, setShowGameSettings] = useState(false);
   const [newGameName, setNewGameName] = useState('');
   const [itemSearchQuery, setItemSearchQuery] = useState('');
   const [showItemDropdown, setShowItemDropdown] = useState(false);
@@ -83,10 +85,17 @@ export default function FactoryCalculator() {
     localStorage.setItem('factory-custom-games', JSON.stringify(customGames));
   }, [customGames]);
 
-  // Save exact mode preference
+  // Ensure current game has settings (defaults) and persist settings when changed
   useEffect(() => {
-    localStorage.setItem('factory-exact-mode', JSON.stringify(exactMode));
-  }, [exactMode]);
+    setGameSettings(prev => {
+      if (prev[currentGame]) return prev;
+      return { ...prev, [currentGame]: defaultGameSettings };
+    });
+  }, [currentGame]);
+
+  useEffect(() => {
+    localStorage.setItem('factory-game-settings', JSON.stringify(gameSettings));
+  }, [gameSettings]);
 
   // Auto-save items to current game
   useEffect(() => {
@@ -138,6 +147,7 @@ export default function FactoryCalculator() {
           const customGame = games.find(g => g.id === currentGame);
           if (customGame && customGame.items) {
             setItems(customGame.items);
+            setGameSettings(prev => ({ ...prev, [currentGame]: customGame.settings || defaultGameSettings }));
             setIsLoading(false);
             return;
           }
@@ -156,13 +166,31 @@ export default function FactoryCalculator() {
 
 
 
+  const currentGameSetting = gameSettings[currentGame] || defaultGameSettings;
+  const exactMode = currentGameSetting.exactMode;
+  const timeUnit = currentGameSetting.timeUnit;
+  const timeUnitLabel = timeUnit === 'm' ? 'min' : 'sec';
+  const countsPerTimeUnit = currentGameSetting.countsPerTimeUnit;
+
+  const updateCurrentGameSetting = (key, value) => {
+    setGameSettings(prev => {
+      const curr = prev[currentGame] || defaultGameSettings;
+      return { ...prev, [currentGame]: { ...curr, [key]: value } };
+    });
+
+    // If this is a custom game, also persist settings into the customGames object so exports/imports include them
+    if (currentGame.startsWith('custom-')) {
+      setCustomGames(prev => prev.map(g => g.id === currentGame ? { ...g, settings: { ...(g.settings || defaultGameSettings), [key]: value }, updatedAt: new Date().toISOString() } : g));
+    }
+  };
+
   useEffect(() => {
     if (items.length > 0 && !showResourceTree) {
       calculate();
     } else if (items.length === 0) {
       setResults(null);
     }
-  }, [items, exactMode, showResourceTree]);
+  }, [items, gameSettings, showResourceTree]);
 
   // Add wheel event listener with passive: false to allow preventDefault
   useEffect(() => {
@@ -298,7 +326,10 @@ export default function FactoryCalculator() {
   };
 
   const calculate = () => {
-    const result = calculateFactoryRequirements(items, exactMode);
+    // If the game specifies that counts are per minute, treat every recipe time as 60 seconds for calculations
+    const perUnitSeconds = timeUnit === 'm' ? 60 : 1;
+    const itemsForCalc = items.map(item => ({ ...item, time: countsPerTimeUnit ? perUnitSeconds : item.time }));
+    const result = calculateFactoryRequirements(itemsForCalc, exactMode);
     setResults(result);
   };
 
@@ -552,6 +583,7 @@ export default function FactoryCalculator() {
       id: gameId,
       name: newGameName.trim(),
       items: [...items], // Copy current items
+      settings: defaultGameSettings,
       createdAt: new Date().toISOString()
     };
 
@@ -706,6 +738,7 @@ export default function FactoryCalculator() {
       gameId: currentGame,
       items,
       completedItems: Array.from(completedItems),
+      settings: currentGameSetting,
       exportDate: new Date().toISOString(),
       version: '2.0'
     };
@@ -741,11 +774,13 @@ export default function FactoryCalculator() {
               id: gameId,
               name: data.gameName + ' (Imported)',
               items: data.items,
+              settings: data.settings || defaultGameSettings,
               createdAt: new Date().toISOString()
             };
             
             setCustomGames([...customGames, newGame]);
             setItems(data.items);
+            setGameSettings(prev => ({ ...prev, [gameId]: newGame.settings || defaultGameSettings }));
             setCurrentGame(gameId);
             
             if (data.completedItems && Array.isArray(data.completedItems)) {
@@ -828,32 +863,7 @@ export default function FactoryCalculator() {
             </div>
           </div>
           
-          {/* Exact Mode Toggle */}
-          <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
-            <label className="flex items-center justify-between cursor-pointer">
-              <div>
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Exact Mode</span>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                  Use precise floats instead of rounding up factory counts
-                </p>
-              </div>
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={exactMode}
-                  onChange={(e) => setExactMode(e.target.checked)}
-                  className="sr-only"
-                />
-                <div className={`w-11 h-6 rounded-full transition ${
-                  exactMode ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-                }`}>
-                  <div className={`w-5 h-5 bg-white rounded-full shadow transform transition ${
-                    exactMode ? 'translate-x-5' : 'translate-x-0.5'
-                  } mt-0.5`}></div>
-                </div>
-              </div>
-            </label>
-          </div>
+
           
           {/* Game Selection */}
           <div className="mb-3">
@@ -884,10 +894,18 @@ export default function FactoryCalculator() {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowGameManager(true)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition text-sm font-medium"
+                className="px-3 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition text-sm font-medium flex items-center gap-2"
               >
                 <Edit2 size={14} />
                 Manage Games
+              </button>
+              <button
+                onClick={() => setShowGameSettings(true)}
+                className="px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition text-sm font-medium flex items-center gap-2"
+                title="Open Game Settings"
+              >
+                <Settings size={14} />
+                Game Settings
               </button>
             </div>
           </div>
@@ -1022,17 +1040,19 @@ export default function FactoryCalculator() {
                 step="0.1"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time (s)</label>
-              <input
-                type="number"
-                value={currentItem.time}
-                onChange={(e) => setCurrentItem({ ...currentItem, time: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                min="0.1"
-                step="0.1"
-              />
-            </div>
+            {!countsPerTimeUnit && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time ({timeUnitLabel})</label>
+                <input
+                  type="number"
+                  value={currentItem.time}
+                  onChange={(e) => setCurrentItem({ ...currentItem, time: e.target.value === '' ? '' : parseFloat(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  min="0.1"
+                  step="0.1"
+                />
+              </div>
+            )}
           </div>
 
           <div>
@@ -1300,6 +1320,57 @@ export default function FactoryCalculator() {
                 Close
               </button>
             </div>
+
+
+          </div>
+        </div>
+      )}
+
+      {showGameSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowGameSettings(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-[540px] max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-semibold mb-3 text-gray-800 dark:text-gray-100">Game Settings</h2>
+
+            <div className="space-y-3">
+              <label className="flex items-center justify-between cursor-pointer">
+                <div>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Exact Mode</span>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">Use precise floats instead of rounding up factory counts</p>
+                </div>
+                <div className="relative">
+                  <input type="checkbox" className="sr-only" checked={currentGameSetting.exactMode} onChange={(e) => updateCurrentGameSetting('exactMode', e.target.checked)} />
+                  <div className={`w-11 h-6 rounded-full transition ${currentGameSetting.exactMode ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full shadow transform transition ${currentGameSetting.exactMode ? 'translate-x-5' : 'translate-x-0.5'} mt-0.5`}></div>
+                  </div>
+                </div>
+              </label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time Unit</label>
+                <select className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={currentGameSetting.timeUnit} onChange={(e)=> updateCurrentGameSetting('timeUnit', e.target.value)}>
+                  <option value="s">Seconds (s)</option>
+                  <option value="m">Minutes (m)</option>
+                </select>
+              </div>
+
+              <label className="flex items-center justify-between cursor-pointer">
+                <div>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{`Counts are per ${timeUnit === 'm' ? 'minute' : 'second'}`}</span>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{`Hide time field and treat outputs as per-${timeUnit === 'm' ? 'minute' : 'second'} counts`}</p>
+                </div>
+                <div className="relative">
+                  <input type="checkbox" className="sr-only" checked={currentGameSetting.countsPerTimeUnit} onChange={(e) => updateCurrentGameSetting('countsPerTimeUnit', e.target.checked)} />
+                  <div className={`w-11 h-6 rounded-full transition ${currentGameSetting.countsPerTimeUnit ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full shadow transform transition ${currentGameSetting.countsPerTimeUnit ? 'translate-x-5' : 'translate-x-0.5'} mt-0.5`}></div>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4 border-t dark:border-gray-700">
+              <button onClick={() => setShowGameSettings(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-200">Close</button>
+            </div>
+
           </div>
         </div>
       )}
@@ -1453,17 +1524,19 @@ export default function FactoryCalculator() {
                       step="0.1"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time (s)</label>
-                    <input
-                      type="number"
-                      value={editForm.time}
-                      onChange={(e) => setEditForm({ ...editForm, time: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      min="0.1"
-                      step="0.1"
-                    />
-                  </div>
+                  {!countsPerTimeUnit && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time ({timeUnitLabel})</label>
+                      <input
+                        type="number"
+                        value={editForm.time}
+                        onChange={(e) => setEditForm({ ...editForm, time: e.target.value === '' ? '' : parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        min="0.1"
+                        step="0.1"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -1568,7 +1641,7 @@ export default function FactoryCalculator() {
                     </button>
                   </div>
                   <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    {item.output} in {item.time}s
+                    {countsPerTimeUnit ? `${item.output} per ${timeUnitLabel}` : `${item.output} in ${item.time} ${timeUnitLabel}`}
                     {item.required.length > 0 && ` • ${item.required.length} inputs`}
                   </div>
                 </div>
