@@ -54,6 +54,10 @@ export default function FactoryCalculator() {
   const [newGameName, setNewGameName] = useState('');
   const [itemSearchQuery, setItemSearchQuery] = useState('');
   const [showItemDropdown, setShowItemDropdown] = useState(false);
+  // Index of currently focused requirement input for add-item form (null = none)
+  const [reqDropdownIndex, setReqDropdownIndex] = useState(null);
+  // Index of currently focused requirement input for edit form (null = none)
+  const [editReqDropdownIndex, setEditReqDropdownIndex] = useState(null);
   const [editingGameId, setEditingGameId] = useState(null);
   const [editingGameName, setEditingGameName] = useState('');
 
@@ -229,6 +233,18 @@ export default function FactoryCalculator() {
       ...currentItem,
       required: currentItem.required.filter((_, i) => i !== index)
     });
+  };
+
+  // When a suggestion is clicked in the add-item form
+  const selectRequirementSuggestion = (index, name) => {
+    updateRequirement(index, 'item', name);
+    setReqDropdownIndex(null);
+  };
+
+  // When a suggestion is clicked in the edit-item form
+  const selectEditRequirementSuggestion = (index, name) => {
+    updateEditRequirement(index, 'item', name);
+    setEditReqDropdownIndex(null);
   };
 
   const addItem = () => {
@@ -1059,13 +1075,39 @@ export default function FactoryCalculator() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Required Items</label>
             {currentItem.required.map((req, index) => (
               <div key={index} className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  value={req.item}
-                  onChange={(e) => updateRequirement(index, 'item', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  placeholder="Item name"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={req.item}
+                    onChange={(e) => { updateRequirement(index, 'item', e.target.value); setReqDropdownIndex(index); }}
+                    onFocus={() => setReqDropdownIndex(index)}
+                    onBlur={() => setTimeout(() => setReqDropdownIndex(null), 150)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    placeholder="Item name"
+                  />
+
+                  {reqDropdownIndex === index && (
+                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                      {items
+                        .filter(item => !req.item || item.name.toLowerCase().includes(req.item.toLowerCase()))
+                        .map((item2, idx) => (
+                          <button
+                            key={idx}
+                            onMouseDown={(e) => e.preventDefault()} /* prevent input blur before click */
+                            onClick={() => selectRequirementSuggestion(index, item2.name)}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-800 dark:text-gray-200 text-sm transition"
+                          >
+                            {item2.name}
+                          </button>
+                        ))}
+
+                      {items.filter(item => !req.item || item.name.toLowerCase().includes(req.item.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">No items found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <input
                   type="number"
                   value={req.count}
@@ -1081,7 +1123,7 @@ export default function FactoryCalculator() {
                   <Trash2 size={20} />
                 </button>
               </div>
-            ))}
+            ))} 
             <button
               onClick={addRequirement}
               className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
@@ -1543,13 +1585,39 @@ export default function FactoryCalculator() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Required Items</label>
                   {editForm.required.map((req, index) => (
                     <div key={index} className="flex gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={req.item}
-                        onChange={(e) => updateEditRequirement(index, 'item', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        placeholder="Item name"
-                      />
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={req.item}
+                          onChange={(e) => { updateEditRequirement(index, 'item', e.target.value); setEditReqDropdownIndex(index); }}
+                          onFocus={() => setEditReqDropdownIndex(index)}
+                          onBlur={() => setTimeout(() => setEditReqDropdownIndex(null), 150)}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          placeholder="Item name"
+                        />
+
+                        {editReqDropdownIndex === index && (
+                          <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                            {items
+                              .filter(item => !req.item || item.name.toLowerCase().includes(req.item.toLowerCase()))
+                              .map((item2, idx) => (
+                                <button
+                                  key={idx}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => selectEditRequirementSuggestion(index, item2.name)}
+                                  className="w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-800 dark:text-gray-200 text-sm transition"
+                                >
+                                  {item2.name}
+                                </button>
+                              ))}
+
+                            {items.filter(item => !req.item || item.name.toLowerCase().includes(req.item.toLowerCase())).length === 0 && (
+                              <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">No items found</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
                       <input
                         type="number"
                         value={req.count}
